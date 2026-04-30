@@ -8,31 +8,26 @@ let currentPlayer;
 let gameOver;
 let moveCount;
 
-// Declare the audio context globally
 let audioCtx;
 
 window.onload = function () {
   updateHighScoreDisplay();
   initializeGame();
 
-  // Game Buttons
   document
     .getElementById("reset-btn")
     .addEventListener("click", initializeGame);
   document.getElementById("save-btn").addEventListener("click", saveHighScore);
 
-  // Modal Logic
   document
     .getElementById("leaderboard-btn")
     .addEventListener("click", openModal);
   document.getElementById("close-modal").addEventListener("click", closeModal);
 
-  // Password Clear Logic
   document
     .getElementById("clear-leaderboard-btn")
     .addEventListener("click", clearLeaderboard);
 
-  // Close modal if player clicks the dark background
   document
     .getElementById("leaderboard-modal")
     .addEventListener("click", function (event) {
@@ -69,35 +64,29 @@ function initializeGame() {
   }
 }
 
-// Layered Audio Function for a Louder, Distinct "Clack"
 function playDropSound() {
   if (!audioCtx) return;
 
   const now = audioCtx.currentTime;
 
-  // Master Volume Control
   const masterGain = audioCtx.createGain();
   masterGain.connect(audioCtx.destination);
 
-  // Boost the initial volume to 1.5x, then aggressively snap it to zero over 50 milliseconds
   masterGain.gain.setValueAtTime(1.5, now);
   masterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
 
-  // Oscillator 1: The Sharp "Snap" (Impact)
   const snapOsc = audioCtx.createOscillator();
   snapOsc.type = "square";
   snapOsc.frequency.setValueAtTime(1500, now);
   snapOsc.frequency.exponentialRampToValueAtTime(100, now + 0.02);
   snapOsc.connect(masterGain);
 
-  // Oscillator 2: The "Hollow Plastic" (Resonance)
   const bodyOsc = audioCtx.createOscillator();
   bodyOsc.type = "triangle";
   bodyOsc.frequency.setValueAtTime(600, now);
   bodyOsc.frequency.exponentialRampToValueAtTime(150, now + 0.04);
   bodyOsc.connect(masterGain);
 
-  // Start and stop both simultaneously
   snapOsc.start(now);
   bodyOsc.start(now);
   snapOsc.stop(now + 0.05);
@@ -107,7 +96,6 @@ function playDropSound() {
 function placePiece() {
   if (gameOver) return;
 
-  // Initialize/Resume Audio Engine on click
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
@@ -134,7 +122,6 @@ function placePiece() {
   chipDiv.classList.add("chip", currentPlayer);
   cell.appendChild(chipDiv);
 
-  // Play the sharp layered click exactly when the CSS animation finishes
   chipDiv.addEventListener("animationend", playDropSound);
 
   checkWin();
