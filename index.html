@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connect 4 - Legacy Edition</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="game-container">
+      <h1>Connect 4</h1>
+
+      <h2 id="status">Red's Turn</h2>
+
+      <div id="board"></div>
+
+      <div id="record-entry" style="display: none">
+        <p>🎉 TOP 7 RECORD! Enter your name:</p>
+        <input
+          type="text"
+          id="player-name"
+          maxlength="13"
+          placeholder="ENTER YOUR NAME"
+          autocomplete="off"
+        />
+        <button id="save-btn">Save</button>
+      </div>
+
+      <div class="controls">
+        <button id="leaderboard-btn">🏆 Leaderboard</button>
+        <button id="reset-btn">Restart Game</button>
+      </div>
+    </div>
+
+    <div id="leaderboard-modal" class="modal" style="display: none">
+      <div class="modal-content">
+        <span id="close-modal">&times;</span>
+        <h3>🏆 Top 7 Records 🏆</h3>
+        <ul id="high-score-list"></ul>
+        <button id="clear-leaderboard-btn">Reset Leaderboard</button>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
