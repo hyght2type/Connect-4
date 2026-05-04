@@ -132,7 +132,7 @@ function handleCellClick() {
 
 function processMove(c) {
   let r = getOpenRow(c);
-  if (r < 0) return; // Column is full
+  if (r < 0) return;
 
   board[r][c] = currentPlayer;
   moveCount++;
@@ -151,7 +151,8 @@ function processMove(c) {
 
     if (isSinglePlayer && currentPlayer === "black") {
       isComputerThinking = true;
-      setTimeout(makeComputerMove, 700);
+      // Let the UI breathe before the computer freezes it to think
+      setTimeout(makeComputerMove, 50);
     }
   }
 }
@@ -162,6 +163,13 @@ function getOpenRow(c) {
     r--;
   }
   return r;
+}
+
+function isBoardFull() {
+  for (let c = 0; c < COLS; c++) {
+    if (board[0][c] === " ") return false;
+  }
+  return true;
 }
 
 // ---------------- AI ALGORITHM & DIFFICULTY ----------------
@@ -176,7 +184,7 @@ function makeComputerMove() {
 
   let bestCol = -1;
 
-  // RULE 1: IMMEDIATE WIN OR BLOCK (All Difficulties do this)
+  // RULE 1: IMMEDIATE WIN OR BLOCK (Always active)
   for (let c of validCols) {
     if (simulateWin(c, "black")) {
       bestCol = c;
@@ -199,7 +207,7 @@ function makeComputerMove() {
     } else if (difficulty === "medium") {
       bestCol = getMediumMove(validCols);
     } else if (difficulty === "hard") {
-      bestCol = getHardMove(validCols);
+      bestCol = getUltraHardMove(validCols);
     }
   }
 
@@ -208,10 +216,8 @@ function makeComputerMove() {
 }
 
 function getEasyMove(validCols) {
-  // 25% random, 75% center-weighted
-  if (Math.random() < 0.25) {
+  if (Math.random() < 0.25)
     return validCols[Math.floor(Math.random() * validCols.length)];
-  }
   const centerPrefs = [3, 2, 4, 1, 5, 0, 6];
   for (let c of centerPrefs) {
     if (validCols.includes(c)) return c;
@@ -220,7 +226,6 @@ function getEasyMove(validCols) {
 }
 
 function getMediumMove(validCols) {
-  // Avoids giving the human player a free win on the next turn
   let safeCols = [];
   for (let c of validCols) {
     let r = getOpenRow(c);
@@ -243,46 +248,76 @@ function getMediumMove(validCols) {
   return options[0];
 }
 
-function getHardMove(validCols) {
-  // Heuristic Algorithm: Scans the board for multi-threat traps
+// ---------------- MINIMAX ALGORITHM (5 Moves Ahead) ----------------
+function getUltraHardMove(validCols) {
   let bestScore = -Infinity;
-  let bestCol = validCols[0];
+  // Always check the middle columns first to speed up the algorithm massively
+  const centerPrefs = [3, 2, 4, 1, 5, 0, 6];
+  let orderedValidCols = centerPrefs.filter((c) => validCols.includes(c));
+  let bestCol = orderedValidCols[0];
 
-  for (let c of validCols) {
+  for (let c of orderedValidCols) {
     let r = getOpenRow(c);
-    board[r][c] = "black";
-
-    // Strict Block: Never play below a winning space for opponent
-    let givesWin = false;
-    if (r - 1 >= 0) {
-      board[r - 1][c] = "red";
-      if (checkBoardWin("red")) givesWin = true;
-      board[r - 1][c] = " ";
-    }
-
-    if (givesWin) {
-      board[r][c] = " ";
-      continue;
-    }
-
-    let score = evaluateBoardScore("black");
-    score += (3 - Math.abs(3 - c)) * 3; // Center weight tie-breaker
+    board[r][c] = "black"; // Drop phantom piece
+    // Look 5 moves deep into the future
+    let score = minimax(5, -Infinity, Infinity, false);
+    board[r][c] = " "; // Remove phantom piece
 
     if (score > bestScore) {
       bestScore = score;
       bestCol = c;
     }
-    board[r][c] = " ";
-  }
-
-  // Fallback if all moves give player a win (forced loss)
-  if (bestScore === -Infinity) {
-    return validCols[Math.floor(Math.random() * validCols.length)];
   }
   return bestCol;
 }
 
-// AI Helper: Checks if a single piece drop results in a win
+function minimax(depth, alpha, beta, isMaximizing) {
+  let isWinRed = checkBoardWin("red");
+  let isWinBlack = checkBoardWin("black");
+
+  // The AI prefers to win FAST (+depth) and lose SLOW (-depth)
+  if (isWinBlack) return 1000000 + depth;
+  if (isWinRed) return -1000000 - depth;
+
+  // If we hit the 5 move limit or the board fills up, score the current setup
+  if (depth === 0 || isBoardFull()) {
+    return evaluateBoardScore("black") - evaluateBoardScore("red");
+  }
+
+  const centerPrefs = [3, 2, 4, 1, 5, 0, 6];
+  let validCols = [];
+  for (let c of centerPrefs) {
+    if (board[0][c] === " ") validCols.push(c);
+  }
+
+  if (isMaximizing) {
+    let maxEval = -Infinity;
+    for (let c of validCols) {
+      let r = getOpenRow(c);
+      board[r][c] = "black";
+      let ev = minimax(depth - 1, alpha, beta, false);
+      board[r][c] = " ";
+      maxEval = Math.max(maxEval, ev);
+      alpha = Math.max(alpha, ev);
+      if (beta <= alpha) break; // Alpha-Beta Pruning (Stops calculating useless branches)
+    }
+    return maxEval;
+  } else {
+    let minEval = Infinity;
+    for (let c of validCols) {
+      let r = getOpenRow(c);
+      board[r][c] = "red";
+      let ev = minimax(depth - 1, alpha, beta, true);
+      board[r][c] = " ";
+      minEval = Math.min(minEval, ev);
+      beta = Math.min(beta, ev);
+      if (beta <= alpha) break;
+    }
+    return minEval;
+  }
+}
+
+// Helper: Checks if a single piece drop results in an immediate win
 function simulateWin(col, player) {
   let r = getOpenRow(col);
   if (r < 0) return false;
@@ -292,7 +327,7 @@ function simulateWin(col, player) {
   return isWin;
 }
 
-// AI Helper: Validates a full board win state
+// Evaluates the full board to see if someone won
 function checkBoardWin(player) {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS - 3; c++) {
@@ -341,7 +376,7 @@ function checkBoardWin(player) {
   return false;
 }
 
-// AI Helper: Scores the "Threat Level" of the board for Hard Mode
+// AI Scoring heuristic for when it looks 5 moves deep
 function evaluateBoardScore(player) {
   let score = 0;
   let opp = player === "black" ? "red" : "black";
@@ -408,8 +443,6 @@ function scoreWindow(window, player, opp) {
   if (pCount === 4) score += 100;
   else if (pCount === 3 && emptyCount === 1) score += 5;
   else if (pCount === 2 && emptyCount === 2) score += 2;
-
-  // Block opponent traps
   if (oCount === 3 && emptyCount === 1) score -= 4;
 
   return score;
@@ -418,7 +451,6 @@ function scoreWindow(window, player, opp) {
 // ---------------- WIN CHECKING ----------------
 function checkWin() {
   if (checkBoardWin(currentPlayer)) {
-    // Find the actual winning cells for the flashing animation
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS - 3; c++) {
         if (
@@ -512,11 +544,14 @@ function declareWinner(winner, winningCells) {
   const statusText = document.getElementById("status");
   let winMessage = winner.toUpperCase() + " WINS IN " + moveCount + " MOVES!";
 
+  // THE EASTER EGG
   if (isSinglePlayer && winner === "black") {
-    winMessage = "COMPUTER WINS!";
+    winMessage =
+      "Com<span style='color: #00ffff; text-shadow: 0px 0px 8px #00ffff;'>PETER</span> WINS!";
   }
 
-  statusText.innerText = winMessage;
+  // Using innerHTML here so the HTML span tags actually render as code
+  statusText.innerHTML = winMessage;
   statusText.style.color = winner === "red" ? "#ff3333" : "#888888";
   gameOver = true;
 
@@ -528,7 +563,6 @@ function declareWinner(winner, winningCells) {
     if (chip) chip.classList.add("flash");
   }
 
-  // Only allow human wins (Red) to be saved to leaderboard
   if (winner === "red") {
     let scores = getSavedScores();
     let qualifiesForLeaderboard = false;
