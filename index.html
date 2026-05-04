@@ -12,8 +12,10 @@
 
       <h2 id="status">Red's Turn</h2>
 
+      <!-- The board -->
       <div id="board"></div>
 
+      <!-- Hidden input for when a player makes the Top 7 -->
       <div id="record-entry" style="display: none">
         <p>🎉 TOP 7 RECORD! Enter your name:</p>
         <input
@@ -26,18 +28,32 @@
         <button id="save-btn">Save</button>
       </div>
 
+      <!-- Buttons and Difficulty Controls -->
       <div class="controls">
-        <button id="btn-1p">👤 1 Player (vs AI)</button>
+        <!-- Grouped AI Controls -->
+        <div class="ai-controls">
+          <button id="btn-1p">👤 1 Player</button>
+          <select id="ai-difficulty">
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+
         <button id="btn-2p">👥 2 Players</button>
         <button id="leaderboard-btn">🏆 Leaderboard</button>
       </div>
     </div>
 
+    <!-- The Popup Modal for the Leaderboard -->
     <div id="leaderboard-modal" class="modal" style="display: none">
       <div class="modal-content">
         <span id="close-modal">&times;</span>
         <h3>🏆 Top 7 Records 🏆</h3>
-        <ul id="high-score-list"></ul>
+        <ul id="high-score-list">
+          <!-- JavaScript will populate the list here -->
+        </ul>
+        <!-- Password Protected Reset Button -->
         <button id="clear-leaderboard-btn">Reset Leaderboard</button>
       </div>
     </div>

@@ -9,13 +9,12 @@ let gameOver;
 let moveCount;
 let audioCtx;
 
-// New AI State Variables
-let isSinglePlayer = true; // Defaults to playing the AI
+let isSinglePlayer = true;
 let isComputerThinking = false;
 
 window.onload = function () {
   updateHighScoreDisplay();
-  initializeGame(true); // Start in 1P mode by default
+  initializeGame(true);
 
   // Mode Buttons
   document
@@ -50,9 +49,7 @@ function initializeGame(singlePlayerMode) {
   isComputerThinking = false;
 
   updateStatusText();
-
   document.getElementById("record-entry").style.display = "none";
-
   const boardDiv = document.getElementById("board");
   boardDiv.innerHTML = "";
 
@@ -63,8 +60,6 @@ function initializeGame(singlePlayerMode) {
       let cell = document.createElement("div");
       cell.id = r.toString() + "-" + c.toString();
       cell.classList.add("cell");
-
-      // Re-routed click event through our new handler
       cell.addEventListener("click", handleCellClick);
       boardDiv.append(cell);
     }
@@ -120,10 +115,8 @@ function playDropSound() {
 
 // ---------------- GAME LOGIC ----------------
 function handleCellClick() {
-  // Prevent human clicking if game is over or AI is thinking
   if (gameOver || isComputerThinking) return;
 
-  // Wake up audio engine on user interaction
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
@@ -137,17 +130,10 @@ function handleCellClick() {
   processMove(c);
 }
 
-// Separated dropping logic from clicking logic so the AI can use it
 function processMove(c) {
-  let r = ROWS - 1;
-  while (r >= 0 && board[r][c] !== " ") {
-    r--;
-  }
+  let r = getOpenRow(c);
+  if (r < 0) return; // Column is full
 
-  // Column is full
-  if (r < 0) return;
-
-  // Formally place the piece
   board[r][c] = currentPlayer;
   moveCount++;
 
@@ -160,36 +146,45 @@ function processMove(c) {
   checkWin();
 
   if (!gameOver) {
-    // Swap turns
     currentPlayer = currentPlayer === "red" ? "black" : "red";
     updateStatusText();
 
-    // Trigger AI Turn if applicable
     if (isSinglePlayer && currentPlayer === "black") {
       isComputerThinking = true;
-      // Delay the AI move slightly so it feels natural
       setTimeout(makeComputerMove, 700);
     }
   }
 }
 
-// ---------------- AI ALGORITHM ----------------
+function getOpenRow(c) {
+  let r = ROWS - 1;
+  while (r >= 0 && board[r][c] !== " ") {
+    r--;
+  }
+  return r;
+}
+
+// ---------------- AI ALGORITHM & DIFFICULTY ----------------
 function makeComputerMove() {
   if (gameOver) return;
 
+  let difficulty = document.getElementById("ai-difficulty").value;
+  let validCols = [];
+  for (let c = 0; c < COLS; c++) {
+    if (board[0][c] === " ") validCols.push(c);
+  }
+
   let bestCol = -1;
 
-  // RULE 1: Can the AI win right now? (Prioritize winning)
-  for (let c = 0; c < COLS; c++) {
+  // RULE 1: IMMEDIATE WIN OR BLOCK (All Difficulties do this)
+  for (let c of validCols) {
     if (simulateWin(c, "black")) {
       bestCol = c;
       break;
     }
   }
-
-  // RULE 2: If no immediate win, can the player win next turn? (Block them)
   if (bestCol === -1) {
-    for (let c = 0; c < COLS; c++) {
+    for (let c of validCols) {
       if (simulateWin(c, "red")) {
         bestCol = c;
         break;
@@ -197,22 +192,14 @@ function makeComputerMove() {
     }
   }
 
-  // RULE 3: Otherwise, pick the best available strategic column
-  // The center column is the strongest in Connect 4, moving outward
+  // RULE 2: DELEGATE TO DIFFICULTY ENGINE
   if (bestCol === -1) {
-    const strategicPreferences = [3, 2, 4, 1, 5, 0, 6];
-    let validCols = [];
-
-    // Find which columns aren't full yet
-    for (let c of strategicPreferences) {
-      if (board[0][c] === " ") validCols.push(c);
-    }
-
-    // Add a 25% chance the AI picks a random valid column so it's not totally predictable
-    if (Math.random() < 0.25) {
-      bestCol = validCols[Math.floor(Math.random() * validCols.length)];
-    } else {
-      bestCol = validCols[0]; // Takes highest priority center-weighted column
+    if (difficulty === "easy") {
+      bestCol = getEasyMove(validCols);
+    } else if (difficulty === "medium") {
+      bestCol = getMediumMove(validCols);
+    } else if (difficulty === "hard") {
+      bestCol = getHardMove(validCols);
     }
   }
 
@@ -220,148 +207,288 @@ function makeComputerMove() {
   processMove(bestCol);
 }
 
-// Helper for AI: Drops a phantom piece and checks if it results in a win
+function getEasyMove(validCols) {
+  // 25% random, 75% center-weighted
+  if (Math.random() < 0.25) {
+    return validCols[Math.floor(Math.random() * validCols.length)];
+  }
+  const centerPrefs = [3, 2, 4, 1, 5, 0, 6];
+  for (let c of centerPrefs) {
+    if (validCols.includes(c)) return c;
+  }
+  return validCols[0];
+}
+
+function getMediumMove(validCols) {
+  // Avoids giving the human player a free win on the next turn
+  let safeCols = [];
+  for (let c of validCols) {
+    let r = getOpenRow(c);
+    board[r][c] = "black";
+    let givesWin = false;
+    if (r - 1 >= 0) {
+      board[r - 1][c] = "red";
+      if (checkBoardWin("red")) givesWin = true;
+      board[r - 1][c] = " ";
+    }
+    board[r][c] = " ";
+    if (!givesWin) safeCols.push(c);
+  }
+
+  let options = safeCols.length > 0 ? safeCols : validCols;
+  const centerPrefs = [3, 2, 4, 1, 5, 0, 6];
+  for (let c of centerPrefs) {
+    if (options.includes(c)) return c;
+  }
+  return options[0];
+}
+
+function getHardMove(validCols) {
+  // Heuristic Algorithm: Scans the board for multi-threat traps
+  let bestScore = -Infinity;
+  let bestCol = validCols[0];
+
+  for (let c of validCols) {
+    let r = getOpenRow(c);
+    board[r][c] = "black";
+
+    // Strict Block: Never play below a winning space for opponent
+    let givesWin = false;
+    if (r - 1 >= 0) {
+      board[r - 1][c] = "red";
+      if (checkBoardWin("red")) givesWin = true;
+      board[r - 1][c] = " ";
+    }
+
+    if (givesWin) {
+      board[r][c] = " ";
+      continue;
+    }
+
+    let score = evaluateBoardScore("black");
+    score += (3 - Math.abs(3 - c)) * 3; // Center weight tie-breaker
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestCol = c;
+    }
+    board[r][c] = " ";
+  }
+
+  // Fallback if all moves give player a win (forced loss)
+  if (bestScore === -Infinity) {
+    return validCols[Math.floor(Math.random() * validCols.length)];
+  }
+  return bestCol;
+}
+
+// AI Helper: Checks if a single piece drop results in a win
 function simulateWin(col, player) {
-  let r = ROWS - 1;
-  while (r >= 0 && board[r][col] !== " ") {
-    r--;
-  }
-  if (r < 0) return false; // Column full
-
-  // Place phantom piece
+  let r = getOpenRow(col);
+  if (r < 0) return false;
   board[r][col] = player;
-
-  // Check if it wins
-  let isWin = false;
-
-  // Check Horizontal
-  for (let i = 0; i < ROWS; i++) {
-    for (let j = 0; j < COLS - 3; j++) {
-      if (
-        board[i][j] === player &&
-        board[i][j + 1] === player &&
-        board[i][j + 2] === player &&
-        board[i][j + 3] === player
-      )
-        isWin = true;
-    }
-  }
-  // Check Vertical
-  for (let j = 0; j < COLS; j++) {
-    for (let i = 0; i < ROWS - 3; i++) {
-      if (
-        board[i][j] === player &&
-        board[i + 1][j] === player &&
-        board[i + 2][j] === player &&
-        board[i + 3][j] === player
-      )
-        isWin = true;
-    }
-  }
-  // Check Diagonal
-  for (let i = 0; i < ROWS - 3; i++) {
-    for (let j = 0; j < COLS - 3; j++) {
-      if (
-        board[i][j] === player &&
-        board[i + 1][j + 1] === player &&
-        board[i + 2][j + 2] === player &&
-        board[i + 3][j + 3] === player
-      )
-        isWin = true;
-    }
-  }
-  // Check Anti-Diagonal
-  for (let i = 3; i < ROWS; i++) {
-    for (let j = 0; j < COLS - 3; j++) {
-      if (
-        board[i][j] === player &&
-        board[i - 1][j + 1] === player &&
-        board[i - 2][j + 2] === player &&
-        board[i - 3][j + 3] === player
-      )
-        isWin = true;
-    }
-  }
-
-  // Remove phantom piece so we don't break the real game
+  let isWin = checkBoardWin(player);
   board[r][col] = " ";
   return isWin;
 }
 
-// ---------------- WIN CHECKING ----------------
-function checkWin() {
+// AI Helper: Validates a full board win state
+function checkBoardWin(player) {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS - 3; c++) {
       if (
-        board[r][c] !== " " &&
-        board[r][c] === board[r][c + 1] &&
-        board[r][c + 1] === board[r][c + 2] &&
-        board[r][c + 2] === board[r][c + 3]
-      ) {
-        declareWinner(board[r][c], [
-          [r, c],
-          [r, c + 1],
-          [r, c + 2],
-          [r, c + 3],
-        ]);
-        return;
-      }
+        board[r][c] === player &&
+        board[r][c + 1] === player &&
+        board[r][c + 2] === player &&
+        board[r][c + 3] === player
+      )
+        return true;
     }
   }
-
   for (let c = 0; c < COLS; c++) {
     for (let r = 0; r < ROWS - 3; r++) {
       if (
-        board[r][c] !== " " &&
-        board[r][c] === board[r + 1][c] &&
-        board[r + 1][c] === board[r + 2][c] &&
-        board[r + 2][c] === board[r + 3][c]
-      ) {
-        declareWinner(board[r][c], [
-          [r, c],
-          [r + 1, c],
-          [r + 2, c],
-          [r + 3, c],
-        ]);
-        return;
-      }
+        board[r][c] === player &&
+        board[r + 1][c] === player &&
+        board[r + 2][c] === player &&
+        board[r + 3][c] === player
+      )
+        return true;
     }
   }
-
   for (let r = 0; r < ROWS - 3; r++) {
     for (let c = 0; c < COLS - 3; c++) {
       if (
-        board[r][c] !== " " &&
-        board[r][c] === board[r + 1][c + 1] &&
-        board[r + 1][c + 1] === board[r + 2][c + 2] &&
-        board[r + 2][c + 2] === board[r + 3][c + 3]
-      ) {
-        declareWinner(board[r][c], [
-          [r, c],
-          [r + 1, c + 1],
-          [r + 2, c + 2],
-          [r + 3, c + 3],
-        ]);
-        return;
-      }
+        board[r][c] === player &&
+        board[r + 1][c + 1] === player &&
+        board[r + 2][c + 2] === player &&
+        board[r + 3][c + 3] === player
+      )
+        return true;
     }
   }
-
   for (let r = 3; r < ROWS; r++) {
     for (let c = 0; c < COLS - 3; c++) {
       if (
-        board[r][c] !== " " &&
-        board[r][c] === board[r - 1][c + 1] &&
-        board[r - 1][c + 1] === board[r - 2][c + 2] &&
-        board[r - 2][c + 2] === board[r - 3][c + 3]
-      ) {
-        declareWinner(board[r][c], [
-          [r, c],
-          [r - 1, c + 1],
-          [r - 2, c + 2],
-          [r - 3, c + 3],
-        ]);
-        return;
+        board[r][c] === player &&
+        board[r - 1][c + 1] === player &&
+        board[r - 2][c + 2] === player &&
+        board[r - 3][c + 3] === player
+      )
+        return true;
+    }
+  }
+  return false;
+}
+
+// AI Helper: Scores the "Threat Level" of the board for Hard Mode
+function evaluateBoardScore(player) {
+  let score = 0;
+  let opp = player === "black" ? "red" : "black";
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS - 3; c++) {
+      let window = [
+        board[r][c],
+        board[r][c + 1],
+        board[r][c + 2],
+        board[r][c + 3],
+      ];
+      score += scoreWindow(window, player, opp);
+    }
+  }
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS - 3; r++) {
+      let window = [
+        board[r][c],
+        board[r + 1][c],
+        board[r + 2][c],
+        board[r + 3][c],
+      ];
+      score += scoreWindow(window, player, opp);
+    }
+  }
+  for (let r = 0; r < ROWS - 3; r++) {
+    for (let c = 0; c < COLS - 3; c++) {
+      let window = [
+        board[r][c],
+        board[r + 1][c + 1],
+        board[r + 2][c + 2],
+        board[r + 3][c + 3],
+      ];
+      score += scoreWindow(window, player, opp);
+    }
+  }
+  for (let r = 3; r < ROWS; r++) {
+    for (let c = 0; c < COLS - 3; c++) {
+      let window = [
+        board[r][c],
+        board[r - 1][c + 1],
+        board[r - 2][c + 2],
+        board[r - 3][c + 3],
+      ];
+      score += scoreWindow(window, player, opp);
+    }
+  }
+  return score;
+}
+
+function scoreWindow(window, player, opp) {
+  let score = 0;
+  let pCount = 0;
+  let oCount = 0;
+  let emptyCount = 0;
+
+  for (let i = 0; i < 4; i++) {
+    if (window[i] === player) pCount++;
+    else if (window[i] === opp) oCount++;
+    else emptyCount++;
+  }
+
+  if (pCount === 4) score += 100;
+  else if (pCount === 3 && emptyCount === 1) score += 5;
+  else if (pCount === 2 && emptyCount === 2) score += 2;
+
+  // Block opponent traps
+  if (oCount === 3 && emptyCount === 1) score -= 4;
+
+  return score;
+}
+
+// ---------------- WIN CHECKING ----------------
+function checkWin() {
+  if (checkBoardWin(currentPlayer)) {
+    // Find the actual winning cells for the flashing animation
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS - 3; c++) {
+        if (
+          board[r][c] !== " " &&
+          board[r][c] === board[r][c + 1] &&
+          board[r][c + 1] === board[r][c + 2] &&
+          board[r][c + 2] === board[r][c + 3]
+        ) {
+          declareWinner(board[r][c], [
+            [r, c],
+            [r, c + 1],
+            [r, c + 2],
+            [r, c + 3],
+          ]);
+          return;
+        }
+      }
+    }
+    for (let c = 0; c < COLS; c++) {
+      for (let r = 0; r < ROWS - 3; r++) {
+        if (
+          board[r][c] !== " " &&
+          board[r][c] === board[r + 1][c] &&
+          board[r + 1][c] === board[r + 2][c] &&
+          board[r + 2][c] === board[r + 3][c]
+        ) {
+          declareWinner(board[r][c], [
+            [r, c],
+            [r + 1, c],
+            [r + 2, c],
+            [r + 3, c],
+          ]);
+          return;
+        }
+      }
+    }
+    for (let r = 0; r < ROWS - 3; r++) {
+      for (let c = 0; c < COLS - 3; c++) {
+        if (
+          board[r][c] !== " " &&
+          board[r][c] === board[r + 1][c + 1] &&
+          board[r + 1][c + 1] === board[r + 2][c + 2] &&
+          board[r + 2][c + 2] === board[r + 3][c + 3]
+        ) {
+          declareWinner(board[r][c], [
+            [r, c],
+            [r + 1, c + 1],
+            [r + 2, c + 2],
+            [r + 3, c + 3],
+          ]);
+          return;
+        }
+      }
+    }
+    for (let r = 3; r < ROWS; r++) {
+      for (let c = 0; c < COLS - 3; c++) {
+        if (
+          board[r][c] !== " " &&
+          board[r][c] === board[r - 1][c + 1] &&
+          board[r - 1][c + 1] === board[r - 2][c + 2] &&
+          board[r - 2][c + 2] === board[r - 3][c + 3]
+        ) {
+          declareWinner(board[r][c], [
+            [r, c],
+            [r - 1, c + 1],
+            [r - 2, c + 2],
+            [r - 3, c + 3],
+          ]);
+          return;
+        }
       }
     }
   }
@@ -373,9 +500,7 @@ function getSavedScores() {
     let scores = localStorage.getItem("c4_topScores");
     if (scores) {
       let parsed = JSON.parse(scores);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.error("Score data corrupted, resetting.");
@@ -387,7 +512,6 @@ function declareWinner(winner, winningCells) {
   const statusText = document.getElementById("status");
   let winMessage = winner.toUpperCase() + " WINS IN " + moveCount + " MOVES!";
 
-  // Let the player know if the AI beat them
   if (isSinglePlayer && winner === "black") {
     winMessage = "COMPUTER WINS!";
   }
@@ -404,7 +528,7 @@ function declareWinner(winner, winningCells) {
     if (chip) chip.classList.add("flash");
   }
 
-  // Only Red (Player 1 or Player 1 in 2P) gets saved to the leaderboard to prevent the computer taking all the top spots!
+  // Only allow human wins (Red) to be saved to leaderboard
   if (winner === "red") {
     let scores = getSavedScores();
     let qualifiesForLeaderboard = false;
@@ -429,11 +553,17 @@ function saveHighScore() {
   let nameInput = document.getElementById("player-name").value;
   if (nameInput.trim() === "") nameInput = "ANON";
 
-  // Tag the mode to the name
-  let modeTag = isSinglePlayer ? " (1P)" : " (2P)";
+  let difficultyTag = "";
+  if (isSinglePlayer) {
+    let diff = document.getElementById("ai-difficulty").value;
+    difficultyTag =
+      diff === "hard" ? " (H)" : diff === "medium" ? " (M)" : " (E)";
+  } else {
+    difficultyTag = " (2P)";
+  }
 
   let newRecord = {
-    name: nameInput.toUpperCase() + modeTag,
+    name: nameInput.toUpperCase() + difficultyTag,
     moves: moveCount,
   };
 
