@@ -152,7 +152,7 @@ function processMove(c) {
     if (isSinglePlayer && currentPlayer === "black") {
       isComputerThinking = true;
       // Let the UI breathe before the computer freezes it to think
-      setTimeout(makeComputerMove, 50);
+      setTimeout(makeComputerMove, 1200);
     }
   }
 }
